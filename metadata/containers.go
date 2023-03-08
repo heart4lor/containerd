@@ -73,6 +73,11 @@ func (s *containerStore) Get(ctx context.Context, id string) (containers.Contain
 	return container, nil
 }
 
+func (s *containerStore) ListQuietly(ctx context.Context) ([]containers.Container, error) {
+	ctx = context.WithValue(ctx, "list_container_quiet", true)
+	return s.List(ctx)
+}
+
 func (s *containerStore) List(ctx context.Context, fs ...string) ([]containers.Container, error) {
 	namespace, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
@@ -86,6 +91,11 @@ func (s *containerStore) List(ctx context.Context, fs ...string) ([]containers.C
 
 	var m []containers.Container
 
+	quiet, ok := ctx.Value("list_container_quiet").(*bool)
+	if !ok {
+		*quiet = false
+	}
+
 	if err := view(ctx, s.db, func(tx *bolt.Tx) error {
 		bkt := getContainersBucket(tx, namespace)
 		if bkt == nil {
@@ -98,6 +108,12 @@ func (s *containerStore) List(ctx context.Context, fs ...string) ([]containers.C
 				return nil
 			}
 			container := containers.Container{ID: string(k)}
+
+			if *quiet {
+				//  quiet mode will return id directly, and filters won't work
+				m = append(m, container)
+				return nil
+			}
 
 			if err := readContainer(&container, cbkt); err != nil {
 				return fmt.Errorf("failed to read container %q: %w", string(k), err)
