@@ -40,6 +40,8 @@ type containerStore struct {
 	db *DB
 }
 
+const QuietListKey = "list_container_quiet"
+
 // NewContainerStore returns a Store backed by an underlying bolt DB
 func NewContainerStore(db *DB) containers.Store {
 	return &containerStore{
@@ -73,8 +75,8 @@ func (s *containerStore) Get(ctx context.Context, id string) (containers.Contain
 	return container, nil
 }
 
-func (s *containerStore) ListQuietly(ctx context.Context) ([]containers.Container, error) {
-	ctx = context.WithValue(ctx, "list_container_quiet", true)
+func (s *containerStore) ListIds(ctx context.Context) ([]containers.Container, error) {
+	ctx = context.WithValue(ctx, QuietListKey, true)
 	return s.List(ctx)
 }
 
@@ -91,9 +93,10 @@ func (s *containerStore) List(ctx context.Context, fs ...string) ([]containers.C
 
 	var m []containers.Container
 
-	quiet, ok := ctx.Value("list_container_quiet").(*bool)
-	if !ok {
-		*quiet = false
+	var quiet = false
+	quietPtr, ok := ctx.Value(QuietListKey).(*bool)
+	if ok {
+		quiet = *quietPtr
 	}
 
 	if err := view(ctx, s.db, func(tx *bolt.Tx) error {
@@ -109,7 +112,7 @@ func (s *containerStore) List(ctx context.Context, fs ...string) ([]containers.C
 			}
 			container := containers.Container{ID: string(k)}
 
-			if *quiet {
+			if quiet {
 				//  quiet mode will return id directly, and filters won't work
 				m = append(m, container)
 				return nil
